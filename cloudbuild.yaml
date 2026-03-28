@@ -1,0 +1,16 @@
+steps:
+  # Step 1: Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: 
+      - 'build'
+      - '-t'
+      - 'gcr.io/home-prices-59122/github.com/bengen343/homeprice-api:$COMMIT_SHA'
+      - '.'
+
+# Step 2: Push the image to Artifact Registry
+images:
+  - 'gcr.io/home-prices-59122/github.com/bengen343/homeprice-api:$COMMIT_SHA'
+
+# Step 3: The fix for your error
+options:
+  logging: CLOUD_LOGGING_ONLY

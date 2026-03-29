@@ -8,22 +8,6 @@ from datetime import datetime
 from google.cloud import secretmanager
 from google.cloud import storage
 
-# Ensure your Cloud Run Job has the appropriate service account with permissions for:
-# - Secret Manager Secret Accessor
-# - Storage Object Admin
-
-# Google Cloud automatically populates GOOGLE_CLOUD_PROJECT in most serverless environments
-PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT", "your-project-id")
-
-def get_api_key() -> str:
-    """Retrieve the RentCast API key from Google Secret Manager."""
-    client = secretmanager.SecretManagerServiceClient()
-    name = f"projects/{PROJECT_ID}/secrets/rentcast-api/versions/latest"
-    
-    response = client.access_secret_version(request={"name": name})
-    # Decode and return the secret payload
-    return response.payload.data.decode("UTF-8").strip()
-
 
 def get_listings_sale(api_key: str, zip_lst: list) -> list:
     """Fetch homes for sale."""
@@ -118,7 +102,8 @@ def save_to_gcs_as_csv(listings: list, bucket_name: str):
 def main():
     print("Starting RentCast data fetch job...")
     try:
-        api_key = get_api_key()
+        PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT", "home-prices-59122")
+        api_key = os.environ.get("RENTCAST_API")
         
         # Get zip codes from environment variable (comma-separated string)
         zip_codes_str = os.environ.get("ZIP_CODES")

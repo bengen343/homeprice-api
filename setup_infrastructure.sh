@@ -1,23 +1,27 @@
 #!/bin/bash
-
-# Exit immediately if a command exits with a non-zero status
 set -e
 
 # ==============================================================================
 # Configuration Variables
 # ==============================================================================
-PROJECT_ID="home-prices-59122"
-REGION="us-west1"
+PROJECT_ID=""
+REGION=""
 REPO_NAME="homeprice-api"
-BUCKET_NAME="routt-co-home-prices" # Change this to your actual desired bucket name
+BUCKET_NAME="routt-co-home-prices" 
 JOB_NAME="homeprice-api-routt-co"
 ZIP_CODES="80428,80467,80469,80477,80479,80483,80487,80488"
 SECRET_NAME="rentcast-api"
-SERVICE_ACCOUNT=" @${PROJECT_ID}.iam.gserviceaccount.com"
 GITHUB_CONNECTION="github-connection"
-GITHUB_REPO=""
+GITHUB_REPO="your-github-username/your-repo-name" # Fill this in
 CLOUD_BUILD_REPO="homeprice-api-repo-gcp"
 TRIGGER_NAME="homeprice-api-build-trigger"
+SCHEDULER_JOB_NAME="homeprice-api-routt-co-schedule"
+SCHEDULER_CRON="0 10 * * 7" # Runs every Sunday at 10:00 AM
+
+# Service Account Names
+SA_RUN="rentcast-job-sa"
+SA_BUILD="rentcast-build-sa"
+SA_SCHEDULER="rentcast-scheduler-sa"
 
 echo "Starting GCP infrastructure setup for $PROJECT_ID..."
 gcloud config set project $PROJECT_ID
@@ -31,23 +35,60 @@ gcloud services enable \
     cloudbuild.googleapis.com \
     artifactregistry.googleapis.com \
     secretmanager.googleapis.com \
-    storage.googleapis.com
+    storage.googleapis.com \
+    iam.googleapis.com \
+    cloudscheduler.googleapis.com \
+    bigquery.googleapis.com
 
 # ==============================================================================
-# 2. Create Artifact Registry Repository (if it doesn't exist)
+# 2. IAM & Service Accounts
 # ==============================================================================
-echo "Creating Artifact Registry repository..."
+echo "Creating Service Accounts..."
+gcloud iam service-accounts create $SA_RUN --display-name="Cloud Run Runtime SA" || echo "SA exists."
+gcloud iam service-accounts create $SA_BUILD --display-name="Cloud Build SA" || echo "SA exists."
+gcloud iam service-accounts create $SA_SCHEDULER --display-name="Cloud Scheduler Invoker SA" || echo "SA exists."
+
+echo "Assigning IAM Roles..."
+# Cloud Run Runtime permissions
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${SA_RUN}@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --role="roles/storage.objectAdmin"
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${SA_RUN}@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+
+# Cloud Build permissions
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${SA_BUILD}@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --role="roles/artifactregistry.writer"
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${SA_BUILD}@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --role="roles/logging.logWriter"
+
+# Cloud Scheduler permissions
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${SA_SCHEDULER}@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --role="roles/run.invoker"
+
+# ==============================================================================
+# 3. Create Storage & Secrets
+# ==============================================================================
+echo "Creating Artifact Registry..."
 gcloud artifacts repositories create $REPO_NAME \
     --repository-format=docker \
     --location=$REGION \
-    --description="Docker repository for Homeprice API" || echo "Repository may already exist, skipping."
+    --description="Docker repository for Homeprice API" || echo "Repo exists."
+
+echo "Creating Cloud Storage bucket..."
+gcloud storage buckets create gs://$BUCKET_NAME --location=$REGION || echo "Bucket exists."
+
+echo "Creating Secret Manager Secret..."
+gcloud secrets create $SECRET_NAME --replication-policy="automatic" || echo "Secret exists."
 
 # ==============================================================================
-# 6. Create Cloud Build Repository and Trigger
+# 4. Cloud Build Trigger
 # ==============================================================================
-echo "Creating Cloud Build Repository..."
-# Note: The connection ($GITHUB_CONNECTION) must be created beforehand (often via the GCP Console) 
-# to handle the one-time OAuth authorization between Google Cloud and GitHub.
+echo "Creating Cloud Build Repository Connection..."
 gcloud builds repositories create $CLOUD_BUILD_REPO \
     --project=$PROJECT_ID \
     --location=$REGION \
@@ -60,24 +101,12 @@ gcloud builds triggers create github \
     --repository=$CLOUD_BUILD_REPO \
     --branch-pattern="^main$" \
     --build-config="cloudbuild.yaml" \
+    --service-account="projects/${PROJECT_ID}/serviceAccounts/${SA_BUILD}@${PROJECT_ID}.iam.gserviceaccount.com" \
     --project=$PROJECT_ID \
     --region=$REGION || echo "Trigger may already exist."
 
 # ==============================================================================
-# 3. Create Cloud Storage Bucket
-# ==============================================================================
-echo "Creating Cloud Storage bucket..."
-gcloud storage buckets create gs://$BUCKET_NAME --location=$REGION || echo "Bucket may already exist, skipping."
-
-# ==============================================================================
-# 4. Create Secret Manager Secret (Placeholder)
-# ==============================================================================
-echo "Creating Secret for Rentcast API..."
-gcloud secrets create $SECRET_NAME --replication-policy="automatic" || echo "Secret may already exist."
-# Note: You will still need to manually add a new version with the actual key value.
-
-# ==============================================================================
-# 5. Create Cloud Run Job
+# 5. Cloud Run Job & Scheduler
 # ==============================================================================
 echo "Creating Cloud Run Job..."
 IMAGE_URL="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${REPO_NAME}:latest"
@@ -85,15 +114,17 @@ IMAGE_URL="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${REPO_NAME}:late
 gcloud run jobs create $JOB_NAME \
     --region=$REGION \
     --image=$IMAGE_URL \
-    --execution-environment=gen2 \
     --set-env-vars="^@^BUCKET_NAME=${BUCKET_NAME}@ZIP_CODES=${ZIP_CODES}" \
     --set-secrets="RENTCAST_API=${SECRET_NAME}:latest" \
-    --cpu=1 \
-    --memory=1Gi \
-    --max-retries=3 \
-    --task-timeout=600s \
-    --service-account=$SERVICE_ACCOUNT || echo "Job creation failed (it may already exist or the image is missing)."
+    --service-account="${SA_RUN}@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --max-retries=3 || echo "Job creation failed (Ensure the :latest image has been built first)."
 
-
+echo "Creating Cloud Scheduler Trigger..."
+gcloud scheduler jobs create http $SCHEDULER_JOB_NAME \
+    --location=$REGION \
+    --schedule="$SCHEDULER_CRON" \
+    --uri="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT_ID}/jobs/${JOB_NAME}:run" \
+    --http-method=POST \
+    --oidc-service-account-email="${SA_SCHEDULER}@${PROJECT_ID}.iam.gserviceaccount.com" || echo "Scheduler job exists."
 
 echo "Infrastructure setup complete!"

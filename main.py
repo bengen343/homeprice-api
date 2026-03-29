@@ -67,7 +67,7 @@ def get_listings_sale(api_key: str, zip_lst: list) -> list:
     return all_listings
 
 
-def save_to_gcs_as_csv(listings: list):
+def save_to_gcs_as_csv(listings: list, bucket_name: str):
     """Format results to one per row and save to Cloud Storage."""
     if not listings:
         print("No listings found to save.")
@@ -104,24 +104,31 @@ def save_to_gcs_as_csv(listings: list):
         writer.writerow(row)
         
     # Generate the YYYYMMDD filename
-    filename = f"routt_county_sales_{date_str}.csv"
+    filename = f"{date_str}.csv"
     
     # Upload to Cloud Storage Bucket
     storage_client = storage.Client()
-    bucket = storage_client.bucket("routt-co-home-prices")
+    bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob(filename)
     
     blob.upload_from_string(csv_buffer.getvalue(), content_type="text/csv")
-    print(f"Successfully uploaded {len(listings)} listings to gs://routt-co-home-prices/{filename}")
+    print(f"Successfully uploaded {len(listings)} listings to gs://{bucket_name}/{filename}")
 
 
 def main():
     print("Starting RentCast data fetch job...")
     try:
         api_key = get_api_key()
-        zip_codes = ["80428", "80467", "80469", "80477", "80479", "80483", "80487", "80488"]
+        
+        # Get zip codes from environment variable (comma-separated string)
+        zip_codes_str = os.environ.get("ZIP_CODES")
+        zip_codes = [zip_code.strip() for zip_code in zip_codes_str.split(",")]
+        
+        # Get bucket name from environment variable
+        bucket_name = os.environ.get("BUCKET_NAME")
+        
         listings = get_listings_sale(api_key, zip_codes)
-        save_to_gcs_as_csv(listings)
+        save_to_gcs_as_csv(listings, bucket_name)
     except Exception as e:
         print(f"Cloud Run Job failed: {e}")
         raise

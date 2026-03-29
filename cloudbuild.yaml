@@ -5,11 +5,14 @@ steps:
       - 'build'
       - '-t'
       - 'us-west1-docker.pkg.dev/home-prices-59122/homeprice-api/homeprice-api:$COMMIT_SHA'
+      - '-t'
+      - 'us-west1-docker.pkg.dev/home-prices-59122/homeprice-api/homeprice-api:latest'
       - '.'
 
 # Step 2: Push the image to Artifact Registry
 images:
   - 'us-west1-docker.pkg.dev/home-prices-59122/homeprice-api/homeprice-api:$COMMIT_SHA'
+  - 'us-west1-docker.pkg.dev/home-prices-59122/homeprice-api/homeprice-api:latest'
 
 # Step 3: The fix for your error
 options:

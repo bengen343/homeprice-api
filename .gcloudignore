@@ -1,0 +1,10 @@
+# Git
+.git
+.gitignore
+
+# Infrastructure and Documentation
+README.md
+setup_infrastructure.sh
+
+# Note: We deliberately do NOT ignore cloudbuild.yaml or Dockerfile here, 
+# because Cloud Build relies on them to execute the remote build!

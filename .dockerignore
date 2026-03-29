@@ -1,0 +1,13 @@
+# Git
+.git
+.gitignore
+
+# Infrastructure and Documentation
+README.md
+setup_infrastructure.sh
+
+# Cloud Build configuration
+cloudbuild.yaml
+
+# Local Python environments and caches
+__pycache__/

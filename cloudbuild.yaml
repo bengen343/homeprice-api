@@ -4,7 +4,7 @@ steps:
     args: 
       - 'build'
       - '-t'
-      - 'us-west1-docker.pkg.dev/home-prices-59122/homeprice-api/homeprice-api:$COMMIT_SHA'
+      - 'gcr.io/home-prices-59122/github.com/bengen343/homeprice-api:$COMMIT_SHA'
       - '.'
 
 # Step 2: Push the image to Artifact Registry

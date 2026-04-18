@@ -5,6 +5,7 @@
 # Infrastructure and Documentation
 README.md
 setup_infrastructure.sh
+sql/
 
 # Cloud Build configuration
 cloudbuild.yaml

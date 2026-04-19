@@ -64,7 +64,7 @@ with field_selection as (
     safe_cast(addressline2 as string) as info_street2
 
   from ${ref("listings")}
-  ${when(incremental(), `where dim_collected_date > (select max(dim_collected_date) from ${self()})`)}
+  ${when(incremental(), `where safe_cast(safe.parse_date('%Y%m%d', safe_cast(collected_date as string)) as date) > (select max(dim_collected_date) from ${self()})`)}
 )
 
 select *

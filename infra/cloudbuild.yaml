@@ -7,7 +7,7 @@ steps:
       - 'us-west1-docker.pkg.dev/home-prices-59122/homeprice-api/homeprice-api:$COMMIT_SHA'
       - '-t'
       - 'us-west1-docker.pkg.dev/home-prices-59122/homeprice-api/homeprice-api:latest'
-      - '.'
+      - 'extract'
 
 # Step 2: Push the image to Artifact Registry
 images:

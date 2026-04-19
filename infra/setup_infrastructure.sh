@@ -81,6 +81,14 @@ gcloud projects add-iam-policy-binding $PROJECT_ID `
     --member="serviceAccount:${SA_BUILD}@${PROJECT_ID}.iam.gserviceaccount.com" `
     --role="roles/bigquery.dataEditor"
 
+# Dataform permissions to impersonate Cloud Build SA
+gcloud iam service-accounts add-iam-policy-binding homeprice-api-cloudbuild@${PROJECT_ID}.iam.gserviceaccount.com `
+    --member="serviceAccount:service-532285499800@gcp-sa-dataform.iam.gserviceaccount.com" `
+    --role="roles/iam.serviceAccountTokenCreator" || echo "Optional SA"
+gcloud iam service-accounts add-iam-policy-binding homeprice-api-cloudbuild@${PROJECT_ID}.iam.gserviceaccount.com `
+    --member="serviceAccount:service-532285499800@gcp-sa-dataform.iam.gserviceaccount.com" `
+    --role="roles/iam.serviceAccountUser" || echo "Optional SA"
+
 # Cloud Scheduler permissions
 gcloud projects add-iam-policy-binding $PROJECT_ID `
     --member="serviceAccount:${SA_SCHEDULER}@${PROJECT_ID}.iam.gserviceaccount.com" `
@@ -116,7 +124,7 @@ gcloud builds triggers create github `
     --name=$TRIGGER_NAME `
     --repository=$CLOUD_BUILD_REPO `
     --branch-pattern="^main$" `
-    --build-config="cloudbuild.yaml" `
+    --build-config="infra/cloudbuild.yaml" `
     --service-account="projects/${PROJECT_ID}/serviceAccounts/${SA_BUILD}@${PROJECT_ID}.iam.gserviceaccount.com" `
     --project=$PROJECT_ID `
     --region=$REGION || echo "Trigger may already exist."
@@ -142,21 +150,5 @@ gcloud scheduler jobs create http $SCHEDULER_JOB_NAME `
     --uri="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT_ID}/jobs/${JOB_NAME}:run" `
     --http-method=POST `
     --oidc-service-account-email="${SA_SCHEDULER}@${PROJECT_ID}.iam.gserviceaccount.com" || echo "Scheduler job exists."
-
-# ==============================================================================
-# 6. BigQuery Scheduled Queries
-# ==============================================================================
-echo "Creating BigQuery Scheduled Query..."
-
-# We use jq to safely escape the multi-line SQL file into a JSON string parameter
-PARAMS=$(jq -n --arg q "$(cat sql/listings_cleaned.sql)" '{"query": $q}')
-
-bq mk `
-    --transfer_config `
-    --project_id=$PROJECT_ID `
-    --data_source=scheduled_query `
-    --display_name="Weekly Clean Listings Update" `
-    --schedule="every sunday 11:00 from America/Denver" `
-    --params="$PARAMS" || echo "Scheduled query creation failed or already exists."
 
 echo "Infrastructure setup complete!"

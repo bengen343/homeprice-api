@@ -1,11 +1,13 @@
-create or replace table `home-prices-59122.bend_or.listings_cleaned` as
-with unique_homes as (
-  select *
-  from `home-prices-59122.bend_or.listings`
-  qualify row_number() over (partition by id order by daysonmarket desc) = 1
-),
+config {
+  type: "incremental",
+  name: "bse_bend_or__listings",
+  bigquery: {
+    partitionBy: "dim_collected_date"
+  }
+}
 
-field_selection as (
+
+with field_selection as (
   select
     -- keys & identifiers
     -- primary key for this table
@@ -61,33 +63,9 @@ field_selection as (
     safe_cast(addressline1 as string) as info_street1,
     safe_cast(addressline2 as string) as info_street2
 
-  from unique_homes
-),
-
-field_calculation as (
-    select
-        field_selection.*,
-        
-        -- Spatial Relative Pricing:
-        -- Compares the price of this home to the average price of comparable homes
-        -- (same number of bedrooms) within a 1 kilometer radius (1000 meters).
-        round(field_selection.met_price / nullif((
-            select avg(b.met_price)
-            from field_selection b
-            where st_dwithin(field_selection.info_home_location, b.info_home_location, 1000) 
-              and field_selection.met_bedrooms = b.met_bedrooms 
-        ), 0), 3) as met_price_vs_nearby_comps_ratio,
-
-        -- Additional Derived Metrics
-        round(field_selection.met_price / nullif(field_selection.met_square_feet, 0), 2) as met_price_per_sqft,
-        extract(year from current_date()) - field_selection.met_year_built as met_home_age_years,
-        round(field_selection.met_bathrooms / nullif(field_selection.met_bedrooms, 0), 2) as met_bath_to_bed_ratio,
-        case when field_selection.met_days_on_market > 90 then true else false end as is_stale_listing,
-        case when field_selection.met_year_built >= extract(year from current_date()) - 1 then true else false end as is_new_construction
-
-    from field_selection
+  from ${ref("listings")}
+  ${when(incremental(), `where dim_collected_date > (select max(dim_collected_date) from ${self()})`)}
 )
 
 select *
-from field_calculation
-;
+from field_selection

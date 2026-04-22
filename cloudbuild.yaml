@@ -1,0 +1,30 @@
+steps:
+  # Step 1: Build the Extract container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: 
+      - 'build'
+      - '-t'
+      - 'us-west1-docker.pkg.dev/home-prices-59122/homeprice-api/extract:$COMMIT_SHA'
+      - '-t'
+      - 'us-west1-docker.pkg.dev/home-prices-59122/homeprice-api/extract:latest'
+      - 'extract'
+
+  # Step 2: Build the Dashboard container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: 
+      - 'build'
+      - '-t'
+      - 'us-west1-docker.pkg.dev/home-prices-59122/homeprice-api/dashboard:$COMMIT_SHA'
+      - '-t'
+      - 'us-west1-docker.pkg.dev/home-prices-59122/homeprice-api/dashboard:latest'
+      - 'dashboard'
+
+# Step 3: Push the images to Artifact Registry
+images:
+  - 'us-west1-docker.pkg.dev/home-prices-59122/homeprice-api/extract:$COMMIT_SHA'
+  - 'us-west1-docker.pkg.dev/home-prices-59122/homeprice-api/extract:latest'
+  - 'us-west1-docker.pkg.dev/home-prices-59122/homeprice-api/dashboard:$COMMIT_SHA'
+  - 'us-west1-docker.pkg.dev/home-prices-59122/homeprice-api/dashboard:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
